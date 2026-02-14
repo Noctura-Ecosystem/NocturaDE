@@ -1,0 +1,1 @@
+This is a prototype of NocturaDE, it will use oython (so i can plan comfortably) then will be translated into rust!
