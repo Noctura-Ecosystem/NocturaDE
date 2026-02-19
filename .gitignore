@@ -1,0 +1,8 @@
+pywlroots
+src
+libs/__pycache__
+libs/test.py
+libs/tools/__pycache__
+.venv
+# This is just a script i use for making automatic formated updates; not a part of the project
+maintainer.py  
