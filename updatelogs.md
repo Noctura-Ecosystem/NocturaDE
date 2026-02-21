@@ -12,3 +12,14 @@
 
 ---
 
+
+## SAMPLE 2
+**Date:** 2026-02-21 20:39:48
+
+- Finished with the template (its in pseudocode + python)
+- NocturaDE will officially start being made
+- Framework list decided
+    - React (for shell)
+    - Smithay (for Compositor)
+
+---
