@@ -1,0 +1,9 @@
+[package]
+name = "NocturaDE"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+smithay = { version = "0.7.0", features = ["renderer_gl", "backend_winit"] }
+wayland-server = "0.31"
+calloop = "0.12"

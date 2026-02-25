@@ -23,3 +23,14 @@
     - Smithay (for Compositor)
 
 ---
+
+## SAMPLE 3
+**Date:** 2026-02-25 13:34:38
+
+- Made a simple version of the DE in Rust
+- The following features have been implemented
+    - A window will open if you run the program
+    - Initializes the wayland-socket
+    - You can run apps (but it wont be visable as renderer isnt made yet)
+
+---

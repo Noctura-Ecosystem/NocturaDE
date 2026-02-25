@@ -4,5 +4,9 @@ pywlroots
 maintainer.py
 
 # template
-libs/
-main.py
+junk
+Cargo.lock
+
+# Added by cargo
+
+/target
