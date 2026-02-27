@@ -34,3 +34,10 @@
     - You can run apps (but it wont be visable as renderer isnt made yet)
 
 ---
+
+## PATCH of SAMPLE 3
+**Date:** 2026-02-25 13:53:35
+
+- got rid of useless file: handlers.rs (this is only for future ideas)
+
+---
