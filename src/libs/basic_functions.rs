@@ -14,7 +14,7 @@ use smithay::{
 use crate::libs::constants::CompositorState;
 
 
-/* FROM SMALLVIL */
+/* FROM SMALLVIL LINK:- https://github.com/Smithay/smithay/tree/master/smallvil */
 pub fn init_wayland(
     event_loop: &mut EventLoop<CompositorState>,
     state: &mut CompositorState,
@@ -52,7 +52,7 @@ pub fn init_wayland(
                     None, None, None,
                 );
             }
-            // WinitEvent::Input(event) => state.process_input_event(event),    <<< TODO: ADD AN IPUT HANDLER
+            WinitEvent::Input(event) => state.handle_input_event(event),
             WinitEvent::Redraw => {
                 let size = backend.window_size();
                 let damage = Rectangle::from_size(size);
@@ -79,11 +79,10 @@ pub fn init_wayland(
                 }
                 backend.submit(Some(&[damage])).unwrap();
 
-                // 3. Added the missing start_time.elapsed() argument
                 state.space.elements().for_each(|window| {
                     window.send_frame(
                         &output,
-                        state.start_time.elapsed(), // This was missing
+                        state.start_time.elapsed(),
                         Some(Duration::ZERO),
                         |_, _| Some(output.clone()),
                     )
@@ -101,7 +100,7 @@ pub fn init_wayland(
             }
             _ => (),
         };
-    })?; // 5. Added '?' here to catch closure insertion errors
+    })?;
 
-    Ok(()) // 6. Final success return
+    Ok(())
 }

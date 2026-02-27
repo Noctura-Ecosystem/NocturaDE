@@ -1,45 +1,53 @@
 #![allow(warnings)]
 
 use crate::libs::utils::log;
-
-use std::ffi::OsString;
 use crate::init_wayland;
-
-// Wayland Server imports
+use std::ffi::OsString;
 use wayland_server::DisplayHandle;
 use wayland_server::protocol::wl_surface::WlSurface;
-
-// Smithay Core & Desktop
 use smithay::desktop::{PopupManager, Space, Window as WLwindow};
 use smithay::reexports::calloop::{EventLoop, LoopSignal};
 use smithay::reexports::wayland_server::{Display, protocol::wl_shm};
-
-// Smithay Wayland Protocols & States
 use smithay::wayland::compositor::CompositorState as WlCompositorState;
 use smithay::wayland::output::OutputManagerState;
 use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::socket::ListeningSocketSource;
-
-// Selection / Data Device
 use smithay::wayland::selection::data_device::{DataDeviceHandler, DataDeviceState};
 use smithay::wayland::selection::SelectionHandler;
-
-// Input
 use smithay::input::{Seat, SeatState, SeatHandler};
 use smithay::input::pointer::CursorImageStatus;
-
-// Macros
 use smithay::{delegate_compositor, delegate_data_device, delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell};
-
 use smithay::wayland::compositor::CompositorHandler;
 use smithay::wayland::output::OutputHandler;
-
 use smithay::wayland::selection::data_device::ClientDndGrabHandler;
 use smithay::wayland::selection::data_device::ServerDndGrabHandler;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
 use smithay::desktop::space::render_output;
+use smithay::backend::input::AbsolutePositionEvent;
+use smithay::backend::input::Axis;
+use smithay::backend::input::AxisSource;
+use smithay::backend::input::ButtonState;
+use smithay::backend::input::Event;
+use smithay::backend::input::InputBackend;
+use smithay::backend::input::InputEvent::Keyboard;
+use smithay::backend::input::InputEvent::PointerMotionAbsolute;
+use smithay::backend::input::InputEvent::PointerButton;
+use smithay::backend::input::InputEvent::PointerMotion;
+use smithay::backend::input::InputEvent::PointerAxis;
+use smithay::backend::input::KeyboardKeyEvent;
+use smithay::backend::input::PointerAxisEvent;
+use smithay::backend::input::PointerButtonEvent;
+use smithay::input::keyboard::FilterResult;
+use smithay::input::pointer::AxisFrame;
+use smithay::input::pointer::ButtonEvent;
+use smithay::input::pointer::MotionEvent;
+use smithay::utils::SERIAL_COUNTER;
+use smithay::backend::input::InputEvent;
+use smithay::utils::Point;
+use smithay::utils::Logical;
+use smithay::desktop::WindowSurfaceType;
 
 
 #[derive(Default)]
@@ -225,6 +233,125 @@ impl CompositorState {
     }
 
     pub fn render_frame(&mut self, renderer: &mut GlesRenderer, output: &smithay::output::Output) {
+    }
+
+    /* THE FOLLOWING TWO FUNCTIONS ARE INSPIRED BY SMALLVIL LINK:- https://github.com/Smithay/smithay/tree/master/smallvil */
+    pub fn handle_input_event<I: InputBackend>(&mut self, event: InputEvent<I>){
+        let pointer = self.seat.get_pointer().unwrap();
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = SERIAL_COUNTER.next_serial();
+
+        match event {
+            Keyboard { event, .. } => {
+                let time = event.time_msec();
+                keyboard.input::<(), _>(
+                    self,
+                    event.key_code(),
+                    event.state(),
+                    serial,
+                    time,
+                    |_, _, _| FilterResult::Forward,
+                );
+            }
+
+            PointerMotionAbsolute { event, .. } => {
+                let output_data = self.space.outputs().next().and_then(|o| {
+                    self.space.output_geometry(o).map(|geo| (geo.size, geo.loc))
+                });
+
+                if let Some((size, loc)) = output_data {
+                    let pos = event.position_transformed(size) + loc.to_f64();
+                    let time = event.time_msec();
+                    let under = self.surface_under(pos);
+
+                    pointer.motion(self, under, &MotionEvent { location: pos, serial, time });
+                    pointer.frame(self);
+                }
+            }
+
+            PointerButton { event, .. } => {
+                let time = event.time_msec();
+                let button_state = event.state();
+
+                if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
+                    let pos = pointer.current_location();
+                    let target = self.space.element_under(pos).map(|(w, _)| w.clone());
+
+                    if let Some(window) = target {
+                        let surface = window.toplevel().unwrap().wl_surface().clone();
+                        self.space.raise_element(&window, true);
+                        keyboard.set_focus(self, Some(surface), serial);
+                    } else {
+                        keyboard.set_focus(self, None, serial);
+                    }
+
+                    self.space.elements().for_each(|w| {
+                        w.toplevel().unwrap().send_pending_configure();
+                    });
+                }
+
+                pointer.button(self, &ButtonEvent { 
+                    button: event.button_code(), 
+                    state: button_state, 
+                    serial, 
+                    time 
+                });
+                pointer.frame(self);
+            }
+
+            PointerMotion { .. } => {}
+
+            PointerAxis { event, .. } => {
+                let time = event.time_msec();
+                let source = event.source();
+                let mut frame = AxisFrame::new(time).source(source);
+
+                let horizontal_amount = event.amount(Axis::Horizontal)
+                    .unwrap_or_else(|| event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.0);
+
+                let vertical_amount = event.amount(Axis::Vertical)
+                    .unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.0);
+
+                let horizontal_amount_discrete = event.amount_v120(Axis::Horizontal);
+                let vertical_amount_discrete = event.amount_v120(Axis::Vertical);
+
+                if horizontal_amount != 0.0 {
+                    frame = frame.value(Axis::Horizontal, horizontal_amount);
+                    if let Some(discrete) = horizontal_amount_discrete {
+                        frame = frame.v120(Axis::Horizontal, discrete as i32);
+                    }
+                }
+
+                if vertical_amount != 0.0 {
+                    frame = frame.value(Axis::Vertical, vertical_amount);
+                    if let Some(discrete) = vertical_amount_discrete {
+                        frame = frame.v120(Axis::Vertical, discrete as i32);
+                    }
+                }
+
+                if source == AxisSource::Finger {
+                    if event.amount(Axis::Horizontal) == Some(0.0) {
+                        frame = frame.stop(Axis::Horizontal);
+                    }
+                    if event.amount(Axis::Vertical) == Some(0.0) {
+                        frame = frame.stop(Axis::Vertical);
+                    }
+                }
+
+                pointer.axis(self, frame);
+                pointer.frame(self);
+            }
+
+            _ => {}
+        }
+    }
+
+    pub fn surface_under(&self, pos: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
+        self.space.element_under(pos).and_then(|(window, location)| {
+            window
+                .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+                .map(|(s, p)| (s, (p + location).to_f64()))
+        })
     }
 }
 

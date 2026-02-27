@@ -41,3 +41,15 @@
 - got rid of useless file: handlers.rs (this is only for future ideas)
 
 ---
+
+## SAMPLE 4
+**Date:** 2026-02-27 12:21:03
+
+- Completed init_wayland function by adding the handle_input_event and surface_under function (both inspired by smallvil)
+- features of handle_input_event include:-
+    - can handle keyboard events
+    - can handle pointer events (scroll wheel, pointer button, cursor)
+    - can handle touch/absolute cursor position value
+- surface_under was made so we can know exactly under which UI element the cursor is under
+
+---

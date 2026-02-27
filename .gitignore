@@ -6,6 +6,7 @@ maintainer.py
 # template
 junk
 Cargo.lock
+notes
 src/libs/handlers.rs
 
 # Added by cargo
