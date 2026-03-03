@@ -60,3 +60,11 @@
 - fixed typo
 
 ---
+
+## SAMPLE 5
+**Date:** 2026-03-03 09:49:04
+
+- Restructured the code so I can renderers and stuff easier forme to make the next update (look out for that 🫣)
+- Added some minor features (priamrly revolving arround the handlers)
+
+---

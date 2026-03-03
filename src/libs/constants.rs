@@ -1,5 +1,25 @@
 #![allow(warnings)]
-
+use std::sync::Arc;
+use wayland_server::backend::ClientData;
+use wayland_server::backend::ClientId;
+use wayland_server::backend::DisconnectReason;
+use smithay::wayland::selection::data_device::set_data_device_focus;
+use smithay::wayland::buffer::BufferHandler;
+use wayland_server::protocol::wl_buffer::WlBuffer;
+use smithay::wayland::shell::xdg::XdgShellHandler;
+use smithay::backend::renderer::utils::on_commit_buffer_handler;
+use smithay::wayland::compositor::is_sync_subsurface;
+use smithay::wayland::compositor::get_parent;
+use wayland_server::Resource;
+use smithay::wayland::shell::xdg::ToplevelSurface;
+use smithay::desktop::Window as WlWindow;
+use smithay::wayland::shell::xdg::PopupSurface;
+use smithay::wayland::shell::xdg::PositionerState;
+use wayland_server::protocol::wl_seat;
+use smithay::utils::Serial;
+use smithay::desktop::PopupKind;
+use smithay::desktop::get_popup_toplevel_coords;
+use smithay::desktop::find_popup_root_surface;
 use crate::libs::utils::log;
 use crate::init_wayland;
 use std::ffi::OsString;
@@ -50,12 +70,12 @@ use smithay::utils::Logical;
 use smithay::desktop::WindowSurfaceType;
 
 
+
 #[derive(Default)]
 pub struct ClientState {
     pub compositor_state: smithay::wayland::compositor::CompositorClientState,
 }
 
-impl wayland_server::backend::ClientData for ClientState {}
 
 
 enum CursorState {
@@ -71,6 +91,7 @@ enum WindowState {
 }
 
 pub struct CompositorState {
+    pub display: Display<CompositorState>,
     pub start_time: std::time::Instant,
     pub display_handle: DisplayHandle,
     pub socket: OsString,
@@ -86,23 +107,24 @@ pub struct CompositorState {
     pub cursor_state: CursorState,
     pub windows: Vec<Window>,
     pub surfaces: Vec<WlSurface>,
-}
-
-pub struct Window {
-    mapped: bool,
-    grabbed: bool,
-    resize: bool,
-    size: (u32, u32),  // classical x,y cordinates followed throughout the script
-    condition: WindowState,
-    id: u32,
-    name: String,
+    pub popup_manager: PopupManager,
 }
 
 
 
 
+
+impl ClientData for ClientState {
+    fn initialized(&self, _client_id: ClientId) {
+
+    }
+
+    fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {
+
+    }
+}
 impl OutputHandler for CompositorState {}
-impl smithay::input::SeatHandler for CompositorState {
+impl SeatHandler for CompositorState {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
@@ -112,14 +134,20 @@ impl smithay::input::SeatHandler for CompositorState {
     }
 
     fn cursor_image(&mut self, _seat: &Seat<Self>, _status: CursorImageStatus) {}
+
+    fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
+        let dh = &self.display_handle;
+        let client = focused.and_then(|s| dh.get_client(s.id()).ok());
+        set_data_device_focus(dh, seat, client);
+    }
 }
 impl ShmHandler for CompositorState {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
     }
 }
-impl smithay::wayland::buffer::BufferHandler for CompositorState {
-    fn buffer_destroyed(&mut self, _buffer: &smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer) {}
+impl BufferHandler for CompositorState {
+    fn buffer_destroyed(&mut self, _buffer: &WlBuffer) {}
 }
 impl DataDeviceHandler for CompositorState {
     fn data_device_state(&self) -> &DataDeviceState {
@@ -132,9 +160,15 @@ impl SelectionHandler for CompositorState {
 impl ClientDndGrabHandler for CompositorState {}
 impl ServerDndGrabHandler for CompositorState {}
 
-impl smithay::wayland::shell::xdg::XdgShellHandler for CompositorState {
-    fn reposition_request(&mut self, _surface: smithay::wayland::shell::xdg::PopupSurface, _positioner: smithay::wayland::shell::xdg::PositionerState, _token: u32) {
-
+impl XdgShellHandler for CompositorState {
+    fn reposition_request(&mut self, surface: smithay::wayland::shell::xdg::PopupSurface, positioner: smithay::wayland::shell::xdg::PositionerState, token: u32) {
+        surface.with_pending_state(|state| {
+            let geometry = positioner.get_geometry();
+            state.geometry = geometry;
+            state.positioner = positioner;
+        });
+        self.unconstrain_popup(&surface);
+        surface.send_repositioned(token);
     }
     fn xdg_shell_state(&mut self) -> &mut smithay::wayland::shell::xdg::XdgShellState {
         &mut self.xdg_shell
@@ -151,7 +185,6 @@ impl smithay::wayland::shell::xdg::XdgShellHandler for CompositorState {
     fn grab(&mut self, _surface: smithay::wayland::shell::xdg::PopupSurface, _seat: smithay::reexports::wayland_server::protocol::wl_seat::WlSeat, _serial: smithay::utils::Serial) {}
 }
 
-
 impl CompositorHandler for CompositorState {
     fn compositor_state(&mut self) -> &mut WlCompositorState {
         &mut self.compositor
@@ -161,9 +194,25 @@ impl CompositorHandler for CompositorState {
         &client.get_data::<ClientState>().unwrap().compositor_state
     }
 
-    fn commit(&mut self, _surface: &WlSurface) {
+    fn commit(&mut self, surface: &WlSurface) {
+        on_commit_buffer_handler::<Self>(surface);
+        if !is_sync_subsurface(surface) {
+            let mut root = surface.clone();
+            while let Some(parent) = get_parent(&root) {
+                root = parent;
+            }
+            if let Some(window) = self
+                .space
+                .elements()
+                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+            {
+                window.on_commit();
+            }
+        };
+
+       // TODO: make the wins and resizable features
     }
-}
+} 
 
 /* DELEGATE */
 smithay::delegate_xdg_shell!(CompositorState);
@@ -175,12 +224,26 @@ smithay::delegate_data_device!(CompositorState);
 
 
 
+
+
+pub struct Window {
+    mapped: bool,
+    grabbed: bool,
+    resize: bool,
+    size: (u32, u32),  // classical x,y cordinates followed throughout the script
+    condition: WindowState,
+    id: u32,
+    name: String,
+}
+
+
+
 impl CompositorState {
-    pub fn new<'a>(display: &'a mut Display<Self>, event_loop: &mut EventLoop<'a, Self>) -> Self {
+    pub fn new<'a>(display: Display<Self>, event_loop: &mut EventLoop<'a, Self>) -> Self {
 
         /// INITIALIZE ATTRIBUTES ///
 
-        let display_handle = display.handle();
+        let mut display_handle = display.handle();
 
         let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
         let compositor_state = WlCompositorState::new::<Self>(&display_handle);
@@ -195,15 +258,18 @@ impl CompositorState {
         seat.add_keyboard(Default::default(), 200, 25);
         seat.add_pointer();
         let loop_signal = event_loop.get_signal();
-        let listening_socket = ListeningSocketSource::new_auto().unwrap();
-        let socket_name = listening_socket.socket_name().to_os_string();
-        println!("{:?}", socket_name);
+        let socket_name = OsString::new();
+        
+
         let space = Space::default();
         let cursor_state: CursorState = CursorState::IDLE;
         let start_time = std::time::Instant::now();
+        let popup_manager = PopupManager::default();
+        
         
 
         Self {
+            display,
             start_time,
             display_handle,
             socket: socket_name,
@@ -219,12 +285,9 @@ impl CompositorState {
             cursor_state,
             windows: Vec::new(),
             surfaces: Vec::new(),
+            popup_manager,
         }
 
-    }
-
-    pub fn prep(&mut self, event_loop: &mut EventLoop::<Self>) {
-        init_wayland(event_loop, self);
     }
 
     pub fn add_window(&mut self, x: u32, y: u32, id: u32, name: String) {
@@ -235,7 +298,7 @@ impl CompositorState {
     pub fn render_frame(&mut self, renderer: &mut GlesRenderer, output: &smithay::output::Output) {
     }
 
-    /* THE FOLLOWING TWO FUNCTIONS ARE INSPIRED BY SMALLVIL LINK:- https://github.com/Smithay/smithay/tree/master/smallvil */
+    /* THE FOLLOWING TWO FUNCTIONS ARE INSPIRED BY SMALLVIL https://github.com/Smithay/smithay/tree/master/smallvil */
     pub fn handle_input_event<I: InputBackend>(&mut self, event: InputEvent<I>){
         let pointer = self.seat.get_pointer().unwrap();
         let keyboard = self.seat.get_keyboard().unwrap();
@@ -353,6 +416,30 @@ impl CompositorState {
                 .map(|(s, p)| (s, (p + location).to_f64()))
         })
     }
+
+    fn unconstrain_popup(&self, popup: &PopupSurface) {
+        let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
+            return;
+        };
+        let Some(window) = self
+            .space
+            .elements()
+            .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+        else {
+            return;
+        };
+
+        let output = self.space.outputs().next().unwrap();
+        let output_geo = self.space.output_geometry(output).unwrap();
+        let window_geo = self.space.element_geometry(window).unwrap();
+        let mut target = output_geo;
+        target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
+        target.loc -= window_geo.loc;
+
+        popup.with_pending_state(|state| {
+            state.geometry = state.positioner.get_unconstrained_geometry(target);
+        });
+    }
 }
 
 
@@ -369,22 +456,4 @@ impl Window {
         }
     }
 }
-
-/*
-
-        let (mut backend, winit) = winit::init()?;
-        let mode = Mode {
-            size: backend.window_size(),
-            refresh: 60_000,
-        };
-*/
-
-
-/*
-
-4 | use utils::log;
-  |     ^^^^^ help: a similar path exists: `smithay::utils`
-5 | use basic_functions::init_wayland;
-  |     ^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `basic_functions`
-*/
 

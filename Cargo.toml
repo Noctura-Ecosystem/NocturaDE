@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 smithay = { version = "0.7.0", features = ["renderer_gl", "backend_winit"] }
 wayland-server = "0.31"
-calloop = "0.12"
+calloop = "0.14.0"

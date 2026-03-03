@@ -9,6 +9,5 @@ Cargo.lock
 notes
 src/libs/handlers.rs
 
-# Added by cargo
-
-/target
+target/
+.idea/

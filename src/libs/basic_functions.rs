@@ -10,7 +10,10 @@ use smithay::{
     reexports::calloop::EventLoop,
     utils::{Rectangle, Transform},
 };
-
+use std::ffi::OsString;
+use smithay::wayland::socket::ListeningSocketSource;
+use std::sync::Arc;
+use crate::ClientState;
 use crate::libs::constants::CompositorState;
 
 
@@ -73,7 +76,7 @@ pub fn init_wayland(
                         [&state.space],
                         &[],
                         &mut damage_tracker,
-                        [0.1, 0.1, 0.1, 1.0],
+                        [0.2, 0.2, 0.2, 0.3], // for fun (:
                     )
                     .unwrap();
                 }
@@ -103,4 +106,26 @@ pub fn init_wayland(
     })?;
 
     Ok(())
+}
+
+pub fn prep<'a>(state: &mut CompositorState, event_loop: &mut EventLoop<'a, CompositorState>) {
+    let listening_socket = ListeningSocketSource::new_auto().unwrap();
+    let socket_name = listening_socket
+        .socket_name()
+        .to_os_string();
+
+    let handle = event_loop.handle();
+
+    handle
+        .insert_source(
+            listening_socket, move |client_stream, _, state| {
+            state
+                .display_handle
+                .insert_client(client_stream, Arc::new(ClientState::default()))
+                .unwrap();
+        })
+        .expect("Failed to init the wayland event source.");
+    
+    println!("{:?}", socket_name);
+    state.socket = socket_name;
 }
