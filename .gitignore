@@ -1,0 +1,13 @@
+pywlroots
+.venv/
+# This is just a script i use for making automatic formated updates; not a part of the project
+maintainer.py
+
+# template
+junk
+Cargo.lock
+notes
+src/libs/handlers.rs
+
+target/
+.idea/
