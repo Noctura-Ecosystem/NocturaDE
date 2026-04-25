@@ -1,5 +1,4 @@
 use smithay::reexports::wayland_server::Display;
-use smithay::reexports::calloop::EventLoop;
 use smithay::utils::{Clock, Monotonic, Point, Logical};
 use smithay::wayland::compositor::CompositorState;
 use smithay::wayland::data_device::DataDeviceState;
@@ -10,9 +9,7 @@ use smithay::desktop::Window;
 use smithay::input::pointer::CursorImageStatus;
 use smithay::wayland::output::OutputManagerState;
 use smithay::wayland::shell::xdg::XdgShellState;
-use std::rc::Rc;
 use smithay::wayland::compositor::CompositorHandler;
-use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::wayland::shm::ShmHandler;
 use smithay::input::Seat;
 use smithay::input::SeatHandler;
@@ -32,7 +29,8 @@ use smithay::reexports::wayland_server::backend;
 
 
 pub struct View {
-    pub display: Display<State>
+    pub display: Display<State>,
+    pub state: State
 }
 
 #[derive(Default)]
@@ -87,11 +85,11 @@ impl SeatHandler for State {
         &mut self.seat_state
     }
 
-    fn cursor_image(&mut self, seat: &Seat<Self>, status: CursorImageStatus) { // if cursor icon changes (like from loading -> idle -> text)
+    fn cursor_image(&mut self, _seat: &Seat<Self>, status: CursorImageStatus) { // if cursor icon changes (like from loading -> idle -> text)
         self.cursor_status = status;
     }
     
-    fn focus_changed(&mut self, seat: &Seat<Self>, focused: std::option::Option<&smithay::desktop::Window>) { // when focused window changes
+    fn focus_changed(&mut self, _seat: &Seat<Self>, _focused: std::option::Option<&smithay::desktop::Window>) { // when focused window changes
         // TODO: add window focus (could use tauri special commands)
     }
 }

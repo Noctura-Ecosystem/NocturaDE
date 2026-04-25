@@ -68,3 +68,17 @@
 - Added some minor features (priamrly revolving arround the handlers)
 
 ---
+## SAMPLE 6
+**Date:** 2026-04-25 11:24:56
+
+- Refactored code
+
+---
+## SAMPLE 6.1
+**Date:** 2026-04-25 11:57:39
+
+- Added sources to event loop
+    - One source for Apps wanting to connect
+    - The other to handle clients requests
+
+---
