@@ -82,3 +82,11 @@
     - The other to handle clients requests
 
 ---
+## SAMPLE 6.2
+**Date:** 2026-04-26 21:44:21
+
+- Created the data for the data::State struct
+- Issues faced:-
+    - use 'delegate_output!' for the output_sate, dosen't need a seperate trait assignment (in Version 0.3)
+
+---

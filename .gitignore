@@ -11,3 +11,4 @@ src/libs/handlers.rs
 
 target/
 .idea/
+.vscode/
