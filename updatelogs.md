@@ -90,3 +90,9 @@
     - use 'delegate_output!' for the output_sate, dosen't need a seperate trait assignment (in Version 0.3)
 
 ---
+## SAMPLE 6.3 (beta)
+**Date:** 2026-04-27 22:57:45
+
+- Simple set up for output screen done
+
+---

@@ -22,12 +22,24 @@ use smithay::desktop::Window;
 use smithay::wayland::data_device::DataDeviceState;
 use smithay::input::Seat;
 use smithay::input::pointer::CursorImageStatus;
+use smithay::backend::winit;
+use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::output::Mode as wlMode;
+use smithay::output::PhysicalProperties as wlPhysicalProperties;
+use smithay::output::Subpixel;
+use smithay::output::Output as wlOutput;
+use std::time as stdTime;
+use smithay::reexports::calloop::timer::Timer;
+use smithay::backend::renderer::damage::OutputDamageTracker;
 
 fn main() -> anyhow::Result<(), anyhow::Error> {
-    let event_loop: EventLoop<data::View> = EventLoop::try_new()?;
+    let event_loop: EventLoop<data::Data> = EventLoop::try_new()?;
     let mut display: Display<data::State> = Display::new()?;
     let socket = ListeningSocketSource::new_auto()?;
     let socket_name = socket.socket_name().to_os_string();
+    unsafe {
+        std::env::set_var("WAYLAND_DISPLAY", &socket_name);
+    }
     println!("{:?}", socket_name);
     let eh = event_loop.handle();
     eh.insert_source(
@@ -82,6 +94,51 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         output_manager_state,
         xdg_shell_state
     };
+
+    let mut data: data::Data = data::Data{
+        state,
+        display,
+    };
+
+    // set up the output screen
+    // TODO: make this into a function
+
+
+    let (mut backend, mut winit) = winit::init::<GlesRenderer>().unwrap();
+    let size = backend.window_size().physical_size;
+    let mode = wlMode {
+        size,
+        refresh: 60_000,
+    };
+    let physical_properties = wlPhysicalProperties {
+        size: (0, 0).into(),
+        subpixel: Subpixel::Unknown,
+        make: "Noctura".into(),
+        model: "Winit".into(),
+    };
+    let output = wlOutput::new("winit".to_string(), physical_properties);
+    output.create_global::<data::State>(&data.display.handle());
+    output.set_preferred(mode);
+    data.state.space.map_output(&output, (0, 0));
+
+
+
+    let start_time = stdTime::Instant::now();
+    let timer = Timer::immediate();
+    // TODO: insert a pointer
+    let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
+    
+    // This next part of the code is still underdev
+    /* make: UNCCOMMENT-COMMENT style: SYNTAX-ONLY */
+    event_loop.handle().insert_source(timer, 
+        move | _, _, data |{
+            let display = &mut data.display;
+            let state = &mut data.state;
+
+            winit.dispatch_new_events(  |e|{
+                x 
+            })
+    })
     println!("Finished code");
     Ok(())
 }

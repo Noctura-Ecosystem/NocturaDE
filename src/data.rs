@@ -31,7 +31,7 @@ use smithay::wayland::data_device::ClientDndGrabHandler;
 use smithay::wayland::data_device::ServerDndGrabHandler;
 
 
-pub struct View {
+pub struct Data {
     pub display: Display<State>,
     pub state: State,
 }

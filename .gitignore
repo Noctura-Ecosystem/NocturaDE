@@ -7,7 +7,8 @@ maintainer.py
 junk
 Cargo.lock
 notes
-src/libs/handlers.rs
+src/ignore.rs
+
 
 target/
 .idea/
