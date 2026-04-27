@@ -129,16 +129,16 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
     
     // This next part of the code is still underdev
-    /* make: UNCCOMMENT-COMMENT style: SYNTAX-ONLY */
+    /* make: UNCCOMMENT-COMMENT style: SYNTAX-ONLY
     event_loop.handle().insert_source(timer, 
         move | _, _, data |{
             let display = &mut data.display;
             let state = &mut data.state;
 
             winit.dispatch_new_events(  |e|{
-                x 
+                handle_events(e);
             })
-    })
+    }) */
     println!("Finished code");
     Ok(())
 }
