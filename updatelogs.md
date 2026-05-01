@@ -102,3 +102,16 @@
 - fixed comment
 
 ---
+## SAMPLE 6.3
+**Date:** 2026-05-01 22:11:17
+
+- Added Input handlers:-
+    - Supported pointer
+    - Supported touchscreen
+    - Supported Keyboard
+- Made the event loop actually run
+- !IMPORTANT!
+    - IN THE STRUCT 'data' A NEW FIELD CALLED "SEAT"
+    - THIS WAS ADDED SO THE SEAT VARIABLE CAN BE PASSED TO THE HANDLERS WHILE FOLLOWING THE BORROW RULES
+
+---

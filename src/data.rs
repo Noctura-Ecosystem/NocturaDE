@@ -34,6 +34,10 @@ use smithay::wayland::data_device::ServerDndGrabHandler;
 pub struct Data {
     pub display: Display<State>,
     pub state: State,
+    pub seat: Seat<State>,
+}
+pub enum Event {
+    Spawn(String),
 }
 
 #[derive(Default)]

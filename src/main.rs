@@ -1,4 +1,5 @@
 mod data;
+mod input;
 use smithay::reexports::calloop::EventLoop;
 use smithay::reexports::calloop::Interest;
 use smithay::reexports::calloop::Mode;
@@ -14,6 +15,7 @@ use smithay::wayland::shm::ShmState;
 use smithay::wayland::socket::ListeningSocketSource;
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
+use std::time::Duration;
 use smithay::wayland::output::OutputManagerState;
 use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::input::SeatState;
@@ -30,10 +32,16 @@ use smithay::output::Subpixel;
 use smithay::output::Output as wlOutput;
 use std::time as stdTime;
 use smithay::reexports::calloop::timer::Timer;
+use smithay::reexports::calloop::timer::TimeoutAction;
 use smithay::backend::renderer::damage::OutputDamageTracker;
+use smithay::backend::winit::WinitEvent;
+use smithay::backend::input::InputEvent;
+use crate::input::handlePointerButton;
+use crate::input::handlePointerAbsolute;
+use crate::input::handlekeyboard;
 
 fn main() -> anyhow::Result<(), anyhow::Error> {
-    let event_loop: EventLoop<data::Data> = EventLoop::try_new()?;
+    let mut event_loop: EventLoop<data::Data> = EventLoop::try_new()?;
     let mut display: Display<data::State> = Display::new()?;
     let socket = ListeningSocketSource::new_auto()?;
     let socket_name = socket.socket_name().to_os_string();
@@ -98,6 +106,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     let mut data: data::Data = data::Data{
         state,
         display,
+        seat,
     };
 
     // set up the output screen
@@ -127,18 +136,31 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     let timer = Timer::immediate();
     // TODO: insert a pointer
     let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
-    
-    // This next part of the code is still underdev
-    /* make: UNCCOMMENT-COMMENT style: SYNTAX-ONLY
-    event_loop.handle().insert_source(timer, 
-        move | _, _, data |{
-            let display = &mut data.display;
-            let state = &mut data.state;
 
-            winit.dispatch_new_events(  |e|{
-                handle_events(e);
-            })
-    }) */
+    eh.insert_source(timer, move |_, _, mut data| {
+        let display = &mut data.display;
+        let state: &mut data::State = &mut data.state;
+        winit.dispatch_new_events(|e | {
+            match e {
+                WinitEvent::Input(InputEvent::PointerButton { event }) => {
+                    handlePointerButton(event, &mut data.seat, &mut data.state);
+                }
+                WinitEvent::Input(InputEvent::PointerMotionAbsolute { event }) => {
+                    handlePointerAbsolute(event, &mut data.seat, &mut data.state);
+                }
+                WinitEvent::Input(InputEvent::Keyboard { event }) => {
+                    handlekeyboard(event, &mut data.seat, &mut data.state);
+                }
+                _ => {}
+            };
+        }).unwrap();
+        backend.bind().unwrap();
+        display.flush_clients().unwrap();
+        TimeoutAction::ToDuration(Duration::from_millis(16))
+
+    }).expect("Failed to insert Winit events");
+    event_loop.run(None, &mut data, |_| {})?;
+
     println!("Finished code");
     Ok(())
 }
