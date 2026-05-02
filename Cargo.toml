@@ -11,8 +11,10 @@ tracing-subscriber = "0.3.16"
 tokio = { version = "1.26.0", features = ["rt-multi-thread", "macros"] }
 toml = "0.7.3"
 xcursor = "0.3.4"
+calloop = "0.14.4"
+wayland-server = "0.31.13"
 
 [dependencies.smithay]
-version = "0.3"
+version = "0.7"
 git = "https://github.com/smithay/smithay.git"
-rev = "3aab047"
+rev = "a166cf4"

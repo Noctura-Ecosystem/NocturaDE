@@ -17,7 +17,6 @@ use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::CompositorClientState;
 use smithay::wayland::compositor::CompositorHandler;
 use smithay::wayland::compositor::CompositorState;
-use smithay::wayland::data_device::DataDeviceState;
 use smithay::wayland::output::OutputManagerState;
 use smithay::wayland::shell::xdg::PopupSurface;
 use smithay::wayland::shell::xdg::PositionerState;
@@ -26,11 +25,14 @@ use smithay::wayland::shell::xdg::XdgShellHandler;
 use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::wayland::shm::ShmHandler;
 use smithay::wayland::shm::ShmState;
-use smithay::wayland::data_device::DataDeviceHandler;
-use smithay::wayland::data_device::ClientDndGrabHandler;
-use smithay::wayland::data_device::ServerDndGrabHandler;
-
-
+use smithay::wayland::selection::data_device::DataDeviceState;
+use smithay::wayland::selection::data_device::DataDeviceHandler;
+use smithay::wayland::selection::data_device::ClientDndGrabHandler;
+use smithay::wayland::selection::data_device::ServerDndGrabHandler;
+use smithay::wayland::selection::SelectionHandler;
+use smithay::wayland::output::OutputHandler;
+use smithay::output::Output;
+use wayland_server::protocol::wl_output::WlOutput;
 pub struct Data {
     pub display: Display<State>,
     pub state: State,
@@ -87,9 +89,11 @@ impl ShmHandler for State {
 }
 smithay::delegate_shm!(State);
 
+
 impl SeatHandler for State {
-    type KeyboardFocus = Window;
-    type PointerFocus = Window;
+    type KeyboardFocus = WlSurface;
+    type PointerFocus = WlSurface;
+    type TouchFocus = WlSurface;
 
     fn seat_state(&mut self) -> &mut SeatState<Self> {
         // if smithay wants to check the seat_state
@@ -104,12 +108,13 @@ impl SeatHandler for State {
     fn focus_changed(
         &mut self,
         _seat: &Seat<Self>,
-        _focused: std::option::Option<&smithay::desktop::Window>,
+        _focused: std::option::Option<&WlSurface>,
     ) { // when focused window changes
         // TODO: add window focus (could use tauri special commands)
     }
 }
 smithay::delegate_seat!(State);
+
 
 impl XdgShellHandler for State {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -126,20 +131,28 @@ impl XdgShellHandler for State {
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) { // when a app wants to spawn a popup ie. context menus
         // TODO: make the popup logic
     }
+
+    fn reposition_request(&mut self, surface: PopupSurface, positioner: PositionerState, token: u32) {}
     fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
 }
 smithay::delegate_xdg_shell!(State);
 
-impl ClientDndGrabHandler for State {}
-impl ServerDndGrabHandler for State {}
+impl ClientDndGrabHandler for State{}
+
+impl ServerDndGrabHandler for State{}
+
+impl SelectionHandler for State {
+    type SelectionUserData = ();
+}
 
 impl DataDeviceHandler for State {
-    type SelectionUserData = ();
-
     fn data_device_state(&self) -> &DataDeviceState {
         &self.data_device_state
     }
 }
 smithay::delegate_data_device!(State);
+impl OutputHandler for State {
+    fn output_bound(&mut self, _output: Output, _wl_output: WlOutput) {}
+}
 
 smithay::delegate_output!(State);

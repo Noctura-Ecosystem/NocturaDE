@@ -21,7 +21,6 @@ use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::input::SeatState;
 use smithay::desktop::Space;
 use smithay::desktop::Window;
-use smithay::wayland::data_device::DataDeviceState;
 use smithay::input::Seat;
 use smithay::input::pointer::CursorImageStatus;
 use smithay::backend::winit;
@@ -36,6 +35,9 @@ use smithay::reexports::calloop::timer::TimeoutAction;
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::winit::WinitEvent;
 use smithay::backend::input::InputEvent;
+use smithay::wayland::selection::data_device::DataDeviceState;
+use calloop::generic::FdWrapper;
+use smithay::input::pointer::CursorIcon;
 use crate::input::handlePointerButton;
 use crate::input::handlePointerAbsolute;
 use crate::input::handlekeyboard;
@@ -60,14 +62,15 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         },
     )?;
 
+
     eh.insert_source(
         Generic::new(
-            display.backend().poll_fd().as_raw_fd(), // convert the requests into raw fd (like a mailbox)
-            Interest::READ, // Only activate if there is data wanting to be **read**
-            Mode::Level,    // Stay on even if some of the data has been read
+            unsafe { FdWrapper::new(display.backend().poll_fd().as_raw_fd()) }, 
+            Interest::READ, 
+            Mode::Level,    
         ),
         |_, _, data| {
-            data.display.dispatch_clients(&mut data.state).unwrap(); // handle the clients request
+            data.display.dispatch_clients(&mut data.state).unwrap();
             Ok(PostAction::Continue)
         },
     )?;
@@ -76,11 +79,11 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     
     let dh: DisplayHandle = display.handle();
 
-    let time = SmithayClock::<Monotonic>::new().expect("FAIL to initialize clock");
+    let time = SmithayClock::<Monotonic>::new();
     let compositor_state: CompositorState = CompositorState::new::<data::State>(&dh);
     let shm_state = ShmState::new::<data::State>(&dh, vec![]);
     let xdg_shell_state = XdgShellState::new::<data::State>(&dh);
-    let cursor_status = CursorImageStatus::Default;
+    let cursor_status = CursorImageStatus::Named(CursorIcon::Default);
     let pointer_location = (0.0, 0.0).into();
     let space = Space::<Window>::default();
     let data_device_state = DataDeviceState::new::<data::State>(&dh);
@@ -114,11 +117,12 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
 
 
     let (mut backend, mut winit) = winit::init::<GlesRenderer>().unwrap();
-    let size = backend.window_size().physical_size;
+    let size = backend.window_size();
     let mode = wlMode {
-        size,
-        refresh: 60_000,
+        size,           // This must be Size<i32, Physical>
+        refresh: 60_000, // This is in milli-hertz (60fps = 60,000)
     };
+
     let physical_properties = wlPhysicalProperties {
         size: (0, 0).into(),
         subpixel: Subpixel::Unknown,
@@ -137,25 +141,37 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     // TODO: insert a pointer
     let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
 
-    eh.insert_source(timer, move |_, _, mut data| {
+    eh.insert_source(timer, move |_, _, data| {
         let display = &mut data.display;
         let state: &mut data::State = &mut data.state;
+        let seat = &mut data.seat;
         winit.dispatch_new_events(|e | {
             match e {
                 WinitEvent::Input(InputEvent::PointerButton { event }) => {
-                    handlePointerButton(event, &mut data.seat, &mut data.state);
+                    handlePointerButton(event, state, seat);
                 }
                 WinitEvent::Input(InputEvent::PointerMotionAbsolute { event }) => {
-                    handlePointerAbsolute(event, &mut data.seat, &mut data.state);
+                    handlePointerAbsolute(event, state, seat);
                 }
                 WinitEvent::Input(InputEvent::Keyboard { event }) => {
-                    handlekeyboard(event, &mut data.seat, &mut data.state);
+                    handlekeyboard(event, seat, state);
                 }
+                //WinitEvent::Refresh => {}
                 _ => {}
             };
-        }).unwrap();
+        });
         backend.bind().unwrap();
-        display.flush_clients().unwrap();
+        state.space.elements().for_each(|window| {
+            window.send_frame(
+                &output,
+                start_time.elapsed(),
+                Some(Duration::ZERO),
+                |_, _| {
+                    Some(output.clone())
+                })
+        });
+
+        let _ = &data.display.flush_clients().unwrap();
         TimeoutAction::ToDuration(Duration::from_millis(16))
 
     }).expect("Failed to insert Winit events");
