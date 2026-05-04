@@ -1,5 +1,6 @@
 mod data;
 mod input;
+use smithay::desktop::space::render_output;
 use smithay::reexports::calloop::EventLoop;
 use smithay::reexports::calloop::Interest;
 use smithay::reexports::calloop::Mode;
@@ -7,9 +8,9 @@ use smithay::reexports::calloop::PostAction;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::wayland_server::Display;
 use smithay::reexports::wayland_server::DisplayHandle;
-use smithay::reexports::x11rb::protocol::xproto::Cursor;
 use smithay::utils::Clock as SmithayClock;
 use smithay::utils::Monotonic;
+use smithay::utils::Rectangle;
 use smithay::wayland::compositor::CompositorState;
 use smithay::wayland::shm::ShmState;
 use smithay::wayland::socket::ListeningSocketSource;
@@ -32,12 +33,13 @@ use smithay::output::Output as wlOutput;
 use std::time as stdTime;
 use smithay::reexports::calloop::timer::Timer;
 use smithay::reexports::calloop::timer::TimeoutAction;
-use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::winit::WinitEvent;
 use smithay::backend::input::InputEvent;
 use smithay::wayland::selection::data_device::DataDeviceState;
 use calloop::generic::FdWrapper;
 use smithay::input::pointer::CursorIcon;
+use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+use smithay::backend::renderer::damage::OutputDamageTracker;
 use crate::input::handlePointerButton;
 use crate::input::handlePointerAbsolute;
 use crate::input::handlekeyboard;
@@ -140,6 +142,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     let timer = Timer::immediate();
     // TODO: insert a pointer
     let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
+    let signal = event_loop.get_signal();
 
     eh.insert_source(timer, move |_, _, data| {
         let display = &mut data.display;
@@ -156,25 +159,47 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 WinitEvent::Input(InputEvent::Keyboard { event }) => {
                     handlekeyboard(event, seat, state);
                 }
-                //WinitEvent::Refresh => {}
+                WinitEvent::Redraw => {
+                    let size = backend.window_size();
+                    let damages = Rectangle::from_size(size);
+                    {
+                    let (renderer, mut framebuffer) = backend.bind().unwrap();
+                    let _ = render_output::<_, WaylandSurfaceRenderElement<GlesRenderer>, _, _>(
+                        &output, renderer, &mut framebuffer, 1.0, 0, [&state.space], &[], &mut output_damage_tracker, [
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                        ]
+                    );
+                    }
+
+                    backend.submit(Some(&[damages])).unwrap();
+                    state.space.elements().for_each(|window| {
+                        window.send_frame(
+                            &output,
+                            start_time.elapsed(),
+                            Some(Duration::ZERO),
+                            |_, _| Some(output.clone()),
+                        )
+                    });
+                    state.space.refresh();
+                    display.handle().flush_clients().unwrap();
+                    backend.window().request_redraw();
+                }
+                WinitEvent::CloseRequested => {
+                    signal.stop();
+                }
+
                 _ => {}
+
             };
         });
-        backend.bind().unwrap();
-        state.space.elements().for_each(|window| {
-            window.send_frame(
-                &output,
-                start_time.elapsed(),
-                Some(Duration::ZERO),
-                |_, _| {
-                    Some(output.clone())
-                })
-        });
 
-        let _ = &data.display.flush_clients().unwrap();
+
         TimeoutAction::ToDuration(Duration::from_millis(16))
-
     }).expect("Failed to insert Winit events");
+
     event_loop.run(None, &mut data, |_| {})?;
 
     println!("Finished code");
