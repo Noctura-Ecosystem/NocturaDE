@@ -11,10 +11,15 @@ tracing-subscriber = "0.3.16"
 tokio = { version = "1.26.0", features = ["rt-multi-thread", "macros"] }
 toml = "0.7.3"
 xcursor = "0.3.4"
-calloop = "0.14.4"
-wayland-server = "0.31.13"
 
 [dependencies.smithay]
-version = "0.7"
 git = "https://github.com/smithay/smithay.git"
 rev = "a166cf4"
+# These features are MANDATORY for the code you wrote to compile and run.
+features = [
+    "backend_winit", 
+    "renderer_gl",
+    "desktop", 
+    "wayland_frontend",
+    "xwayland" 
+]

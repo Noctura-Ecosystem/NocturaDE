@@ -1,5 +1,6 @@
 mod data;
 mod input;
+use smithay::reexports::calloop;
 use smithay::desktop::space::render_output;
 use smithay::reexports::calloop::EventLoop;
 use smithay::reexports::calloop::Interest;
@@ -40,11 +41,14 @@ use calloop::generic::FdWrapper;
 use smithay::input::pointer::CursorIcon;
 use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
 use smithay::backend::renderer::damage::OutputDamageTracker;
+use std::process::Command;
 use crate::input::handlePointerButton;
 use crate::input::handlePointerAbsolute;
 use crate::input::handlekeyboard;
 
 fn main() -> anyhow::Result<(), anyhow::Error> {
+    let _ = std::fs::remove_file("/run/user/1000/wayland-1");
+    let _ = std::fs::remove_file("/run/user/1000/wayland-1.lock");
     let mut event_loop: EventLoop<data::Data> = EventLoop::try_new()?;
     let mut display: Display<data::State> = Display::new()?;
     let socket = ListeningSocketSource::new_auto()?;
@@ -116,9 +120,12 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
 
     // set up the output screen
     // TODO: make this into a function
+    println!("--- PROGRAM TEST ---1");// Temporary debug line
 
 
     let (mut backend, mut winit) = winit::init::<GlesRenderer>().unwrap();
+
+    println!("--- PROGRAM TEST --- 2");
     let size = backend.window_size();
     let mode = wlMode {
         size,           // This must be Size<i32, Physical>
@@ -135,6 +142,20 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     output.create_global::<data::State>(&data.display.handle());
     output.set_preferred(mode);
     data.state.space.map_output(&output, (0, 0));
+
+    
+    let cmd_res = Command::new("weston-terminal")
+        .env("WAYLAND_DISPLAY", &socket_name)
+        .spawn();
+
+    match cmd_res {
+        Ok(_) => {
+            println!("Loaded weston")
+        }
+        Err(e) => {
+            println!("COULD NOT LOAD WESTON TERMINAL DUE TO {:?}", e)
+        }
+    };
 
 
 

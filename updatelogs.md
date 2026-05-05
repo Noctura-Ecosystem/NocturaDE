@@ -128,3 +128,16 @@
 - Added support for redraw events
 
 ---
+## ISSUE 6.4.2
+**Date:** 2026-05-06 00:00:53
+
+- This was a big found while I was trying to spawn in a terminal
+- However, in line 126 of main .rs or '  let (mut backend, mut winit) = winit::init::<GlesRenderer>().unwrap();
+- It stops the programming fully.
+- Possible sollutions:-
+    - Deleted /run.....wayland-1.lock files
+    - Explicitly name our socket (maybe for testing)
+    - Clear wayalnd diplay variable
+    - and more
+
+---

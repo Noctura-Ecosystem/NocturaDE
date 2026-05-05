@@ -1,4 +1,5 @@
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
+use smithay::reexports::wayland_server;
 use smithay::desktop::Space;
 use smithay::desktop::Window;
 use smithay::input::Seat;
@@ -33,6 +34,7 @@ use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::output::OutputHandler;
 use smithay::output::Output;
 use wayland_server::protocol::wl_output::WlOutput;
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State as XdgState;
 pub struct Data {
     pub display: Display<State>,
     pub state: State,
@@ -122,10 +124,15 @@ impl XdgShellHandler for State {
         &mut self.xdg_shell_state
     }
 
-    fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        // when new apps want to open
-        let window: Window = Window::new(surface);
-        self.space.map_element(window, (0, 0), true); // TODO: spawn element at the center of the screen
+   fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        surface.with_pending_state(|state| {
+            // Use the aliased XdgState here
+            state.states.set(XdgState::Activated);
+        });
+        surface.send_configure();
+
+        let window = Window::new(surface);
+        self.space.map_element(window, (0, 0), true);
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) { // when a app wants to spawn a popup ie. context menus
