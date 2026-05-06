@@ -141,3 +141,10 @@
     - and more
 
 ---
+## FIX 6.4.2.1
+**Date:** 2026-05-06 23:02:53
+
+- logic issue; inititalize winit before getting a new listening socket
+- NEW ISSUE DISCOVERED: the window instantly closes itself
+
+---

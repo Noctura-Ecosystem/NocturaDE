@@ -1,52 +1,64 @@
 mod data;
 mod input;
-use smithay::reexports::calloop;
+use crate::input::handlePointerAbsolute;
+use crate::input::handlePointerButton;
+use crate::input::handlekeyboard;
+use calloop::generic::FdWrapper;
+use smithay::backend::input::InputEvent;
+use smithay::backend::renderer::damage::OutputDamageTracker;
+use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::backend::winit;
+use smithay::backend::winit::WinitEvent;
+use smithay::desktop::Space;
+use smithay::desktop::Window;
 use smithay::desktop::space::render_output;
+use smithay::input::Seat;
+use smithay::input::SeatState;
+use smithay::input::pointer::CursorIcon;
+use smithay::input::pointer::CursorImageStatus;
+use smithay::output::Mode as wlMode;
+use smithay::output::Output as wlOutput;
+use smithay::output::PhysicalProperties as wlPhysicalProperties;
+use smithay::output::Subpixel;
+use smithay::reexports::calloop;
 use smithay::reexports::calloop::EventLoop;
 use smithay::reexports::calloop::Interest;
 use smithay::reexports::calloop::Mode;
 use smithay::reexports::calloop::PostAction;
 use smithay::reexports::calloop::generic::Generic;
+use smithay::reexports::calloop::timer::TimeoutAction;
+use smithay::reexports::calloop::timer::Timer;
 use smithay::reexports::wayland_server::Display;
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::utils::Clock as SmithayClock;
 use smithay::utils::Monotonic;
 use smithay::utils::Rectangle;
 use smithay::wayland::compositor::CompositorState;
+use smithay::wayland::output::OutputManagerState;
+use smithay::wayland::selection::data_device::DataDeviceState;
+use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::wayland::shm::ShmState;
 use smithay::wayland::socket::ListeningSocketSource;
 use std::os::fd::AsRawFd;
-use std::sync::Arc;
-use std::time::Duration;
-use smithay::wayland::output::OutputManagerState;
-use smithay::wayland::shell::xdg::XdgShellState;
-use smithay::input::SeatState;
-use smithay::desktop::Space;
-use smithay::desktop::Window;
-use smithay::input::Seat;
-use smithay::input::pointer::CursorImageStatus;
-use smithay::backend::winit;
-use smithay::backend::renderer::gles::GlesRenderer;
-use smithay::output::Mode as wlMode;
-use smithay::output::PhysicalProperties as wlPhysicalProperties;
-use smithay::output::Subpixel;
-use smithay::output::Output as wlOutput;
-use std::time as stdTime;
-use smithay::reexports::calloop::timer::Timer;
-use smithay::reexports::calloop::timer::TimeoutAction;
-use smithay::backend::winit::WinitEvent;
-use smithay::backend::input::InputEvent;
-use smithay::wayland::selection::data_device::DataDeviceState;
-use calloop::generic::FdWrapper;
-use smithay::input::pointer::CursorIcon;
-use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
-use smithay::backend::renderer::damage::OutputDamageTracker;
 use std::process::Command;
-use crate::input::handlePointerButton;
-use crate::input::handlePointerAbsolute;
-use crate::input::handlekeyboard;
+use std::sync::Arc;
+use std::time as stdTime;
+use std::time::Duration;
 
 fn main() -> anyhow::Result<(), anyhow::Error> {
+    env_logger::init();
+     println!("--- PROGRAM TEST ---1"); // Temporary debug line
+
+    let (mut backend, mut winit) = match winit::init::<GlesRenderer>() {
+        Ok(ret) => ret,
+        Err(err) => {
+            println!("Failed to initialize Winit backend: {}", err);
+            std::process::exit(1);
+        }
+    };
+
+    println!("--- PROGRAM TEST --- 2");
     let _ = std::fs::remove_file("/run/user/1000/wayland-1");
     let _ = std::fs::remove_file("/run/user/1000/wayland-1.lock");
     let mut event_loop: EventLoop<data::Data> = EventLoop::try_new()?;
@@ -68,12 +80,11 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         },
     )?;
 
-
     eh.insert_source(
         Generic::new(
-            unsafe { FdWrapper::new(display.backend().poll_fd().as_raw_fd()) }, 
-            Interest::READ, 
-            Mode::Level,    
+            unsafe { FdWrapper::new(display.backend().poll_fd().as_raw_fd()) },
+            Interest::READ,
+            Mode::Level,
         ),
         |_, _, data| {
             data.display.dispatch_clients(&mut data.state).unwrap();
@@ -82,7 +93,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     )?;
 
     // Now we will make the data to put into the data::State struct
-    
+
     let dh: DisplayHandle = display.handle();
 
     let time = SmithayClock::<Monotonic>::new();
@@ -109,10 +120,10 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         cursor_status,
         pointer_location,
         output_manager_state,
-        xdg_shell_state
+        xdg_shell_state,
     };
 
-    let mut data: data::Data = data::Data{
+    let mut data: data::Data = data::Data {
         state,
         display,
         seat,
@@ -120,15 +131,10 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
 
     // set up the output screen
     // TODO: make this into a function
-    println!("--- PROGRAM TEST ---1");// Temporary debug line
-
-
-    let (mut backend, mut winit) = winit::init::<GlesRenderer>().unwrap();
-
-    println!("--- PROGRAM TEST --- 2");
+   
     let size = backend.window_size();
     let mode = wlMode {
-        size,           // This must be Size<i32, Physical>
+        size,            // This must be Size<i32, Physical>
         refresh: 60_000, // This is in milli-hertz (60fps = 60,000)
     };
 
@@ -143,7 +149,6 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
     output.set_preferred(mode);
     data.state.space.map_output(&output, (0, 0));
 
-    
     let cmd_res = Command::new("weston-terminal")
         .env("WAYLAND_DISPLAY", &socket_name)
         .spawn();
@@ -157,8 +162,6 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         }
     };
 
-
-
     let start_time = stdTime::Instant::now();
     let timer = Timer::immediate();
     // TODO: insert a pointer
@@ -169,7 +172,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
         let display = &mut data.display;
         let state: &mut data::State = &mut data.state;
         let seat = &mut data.seat;
-        winit.dispatch_new_events(|e | {
+        winit.dispatch_new_events(|e| {
             match e {
                 WinitEvent::Input(InputEvent::PointerButton { event }) => {
                     handlePointerButton(event, state, seat);
@@ -184,15 +187,18 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     let size = backend.window_size();
                     let damages = Rectangle::from_size(size);
                     {
-                    let (renderer, mut framebuffer) = backend.bind().unwrap();
-                    let _ = render_output::<_, WaylandSurfaceRenderElement<GlesRenderer>, _, _>(
-                        &output, renderer, &mut framebuffer, 1.0, 0, [&state.space], &[], &mut output_damage_tracker, [
-                            0.0,
-                            0.0,
-                            0.0,
-                            1.0
-                        ]
-                    );
+                        let (renderer, mut framebuffer) = backend.bind().unwrap();
+                        let _ = render_output::<_, WaylandSurfaceRenderElement<GlesRenderer>, _, _>(
+                            &output,
+                            renderer,
+                            &mut framebuffer,
+                            1.0,
+                            0,
+                            [&state.space],
+                            &[],
+                            &mut output_damage_tracker,
+                            [0.0, 0.0, 0.0, 1.0],
+                        );
                     }
 
                     backend.submit(Some(&[damages])).unwrap();
@@ -213,13 +219,12 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 }
 
                 _ => {}
-
             };
         });
 
-
         TimeoutAction::ToDuration(Duration::from_millis(16))
-    }).expect("Failed to insert Winit events");
+    })
+    .expect("Failed to insert Winit events");
 
     event_loop.run(None, &mut data, |_| {})?;
 
